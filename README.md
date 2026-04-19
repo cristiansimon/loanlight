@@ -1,80 +1,124 @@
+# Loan Extractor MVP
+
+Single-service Node.js + TypeScript MVP for extracting loan data from PDF documents in a single loan application.
+
+## What It Does
+
+- Reads PDFs from `sample-data/`
+- Extracts a loan-level record with borrowers using one LLM prompt per document
+- Aggregates document results into a single loan-level record
+- Preserves source traceability for every extracted field
+- Exposes results over a small REST API
+
+## Setup
+
+1. Install dependencies:
+
+```bash
+npm install
 ```
- _                          __  __           _
-| |    ___   __ _ _ __     |  \/  | __ _ ___| |_ ___ _ __
-| |   / _ \ / _` | '_ \    | |\/| |/ _` / __| __/ _ \ '__|
-| |__| (_) | (_| | | | |   | |  | | (_| \__ \ ||  __/ |
-|_____\___/ \__,_|_| |_|   |_|  |_|\__,_|___/\__\___|_|
+
+2. Set your OpenAI API key:
+
+```bash
+$env:OPENAI_API_KEY="your-key"
 ```
 
-# 🏠 Overview
+Optional:
 
-Build an unstructured data extraction system using a provided document corpus. You have **full autonomy** over the technology stack and implementation approach. 🧪
+```bash
+$env:OPENAI_MODEL="gpt-4.1-mini"
+```
 
-We **heavily encourage** the use of bleeding-edge coding agents to develop the app — we want to review your *process* and your *understanding* of the system that gets generated. 🤖✨
+## Run
 
-## ⏱️ Timeline
+Development:
 
-- 📅 **Deadline:** 7 days from receipt
-- ⚡ **Expected effort:** 4–8 hours
+```bash
+npm run dev
+```
 
-## 🧩 Problem Description
+Production-style:
 
-The provided folder contains a corpus of documents with variable formatting, mixed file types, and structured data embedded within unstructured text. 📚 The goal is to design and implement a system that extracts meaningful, structured data from these documents.
+```bash
+npm run build
+npm start
+```
 
-Your solution should include logic for parsing unstructured data **and** an API or interface to serve the processed data in a meaningful form. 🔌
+The server runs on `http://localhost:3000` by default.
 
-### 📄 Loan Documents
+## API
 
-Analyze the documents and produce a structured record for each borrower that includes extracted PII like:
+Process all PDFs in `sample-data/`:
 
-- 👤 Name
-- 🏡 Address
-- 💰 Full income history
-- 🔢 Associated account / loan numbers
+```bash
+curl -X POST http://localhost:3000/process
+```
 
-…with a clear reference 🔗 to the original document(s) from which each piece of information was sourced.
+Get aggregated loan-level record (preferred):
 
-## 📦 Deliverables
+```bash
+curl http://localhost:3000/loan
+```
 
-### 1. 🏗️ System Design Document (Markdown)
+Get loan-level record by ID (preferred):
 
-- 🗺️ Architecture overview, including component diagram
-- 🔄 Data pipeline design covering ingestion, processing, storage, and retrieval
-- 🧠 AI / LLM integration strategy and model selection rationale
-- 🎨 Approach for handling document format variability
-- 📈 Scaling considerations for **10x** and **100x** document volume
-- ⚖️ Key technical trade-offs and reasoning
-- 🛡️ Error handling strategy and data quality validation approach
+```bash
+curl http://localhost:3000/loan/loan-1
+```
 
-### 2. 🛠️ Working Implementation
+Backward-compatible route for the same aggregated loan-level record:
 
-- 📥 Document ingestion pipeline
-- 🤖 Extraction logic using AI / LLM tooling
-- 🗂️ Structured output generation (e.g., JSON or database-backed)
-- 🔍 Basic query or retrieval interface
-- ✅ Test coverage for critical paths (encouraged but not required)
+```bash
+curl http://localhost:3000/borrowers
+```
 
-### 3. 📖 README
+Backward-compatible route for loan-level record by ID:
 
-- 🏁 Setup and run instructions
-- 💡 Summary of architectural and implementation decisions
+```bash
+curl http://localhost:3000/borrower/loan-1
+```
 
-## 🚀 Submission Instructions
+Note:
+The preferred endpoints are `/loan` and `/loan/:id`. The older `/borrowers` and `/borrower/:id` routes still work and return the same loan-level record.
 
-Fork this repository and submit your git repository containing all deliverables. Email a link to the repo upon completion. 📧
+## Usage Notes
 
-## 🎯 Next Steps
+- `POST /process` must be called before retrieving results.
+- Results are stored in-memory for the duration of the process.
+- Restarting the server clears the current loan-level record.
+- Some PDFs are image-based and will be skipped in this MVP.
+- The output is loan-level first; borrower-level attribution is intentionally limited.
 
-After submission, you can expect to participate in **three 45-minute** follow-up sessions:
+## Tests
 
-- 🧰 **Development Tooling Approach** — discussion of development environment and tooling approaches
-- 🏛️ **Systems Design Session** — walkthrough of design decisions and discussion of potential extensions
-- 🔬 **Code Review Session** — review of implementation details and technical choices
+```bash
+npm test
+npm run typecheck
+```
 
-## 💬 Questions
+## Output Shape
 
-We encourage you to reach out with any questions. 🙋 Scope clarification is available, but implementation decisions are intentionally left open-ended. 🎨
+Each field inside the loan-level record is deduplicated by value and keeps all supporting sources:
 
----
+```json
+{
+  "value": "John Homeowner",
+  "sources": [
+    {
+      "documentName": "W2 2024- John Homeowner.pdf",
+      "snippet": "John Homeowner"
+    }
+  ]
+}
+```
 
-*Good luck, and have fun building, we appreciate your time and interest.* 🍀
+## Key Decisions
+
+1. One generic prompt for all document types so the MVP works across W2s, paystubs, bank statements, and unknown layouts without template code.
+2. Strict schema validation plus one retry keeps LLM output usable while staying simple.
+3. In-memory storage keeps the service small and easy to explain, while `design.md` describes how to move to durable infrastructure later.
+
+## Decision Log
+
+The loan-level record includes a small `decisionLog` that captures decisions such as single-loan aggregation and joint borrower detection. It makes the output easier to review and debug.
